@@ -9,7 +9,7 @@ void setup() {
 }
 
 void loop() {
-  // ==================== 基础闪烁部分 ====================
+  // ============= 基础闪烁部分 ============
   digitalWrite(ledPin, HIGH);  // 点亮LED
   Serial.println("LED ON");    // 串口输出提示
   delay(1000);                 // 保持1秒（1000毫秒）
