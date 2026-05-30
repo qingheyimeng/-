@@ -1,0 +1,157 @@
+#include <WiFi.h>
+#include <WebServer.h>
+
+const char* wifiId = "123";
+const char* wifiCode = "00000000";
+
+const int outputLight1 = 2;
+const int outputLight2 = 5;
+const int outputLight3 = 19;
+const int touchSignalPin = 4;
+const int touchLimit = 700;
+
+bool lockMode = false;
+bool alertState = false;
+int touchRawData = 0;
+
+WebServer httpService(80);
+
+String webDisplay = R"HTML(
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ESP32 Touch Detector Monitor</title>
+<style>
+  body{text-align:center; font-family:Helvetica; margin-top:35px; background:#f0f0f0;}
+  .displayBox{
+    background:#ffffff; padding:36px; border-radius:22px;
+    width:330px; display:inline-block; box-shadow:0 0 12px rgba(0,0,0,0.08);
+  }
+  .dataNum{
+    font-size:58px; font-weight:700; color:#0066cc; margin:35px 0;
+  }
+  .textTip{font-size:21px; color:#555;}
+  .operateBtn{
+    width:145px; height:48px; font-size:17px; margin:12px;
+    border:none; border-radius:10px; color:#fff;
+  }
+  .lockBtn{background:#e62e2e;}
+  .unlockBtn{background:#2eb82e;}
+</style>
+</head>
+<body>
+<div class="displayBox">
+  <h2>Real-time Touch Reading</h2>
+  <div class="textTip">Touch Sensor Value:</div>
+  <div class="dataNum" id="touchOutput">0</div>
+
+  <h4>Security System Control</h4>
+  <button class="operateBtn lockBtn" onclick="setLock()">Activate Guard</button>
+  <button class="operateBtn unlockBtn" onclick="releaseLock()">Deactivate Guard</button>
+</div>
+
+<script>
+function refreshSensorData() {
+  fetch("/readData")
+  .then(res => res.text())
+  .then(result => {
+    document.getElementById("touchOutput").innerText = result;
+  });
+}
+
+setInterval(refreshSensorData, 100);
+
+function setLock(){ fetch("/enableGuard"); }
+function releaseLock(){ fetch("/disableGuard"); }
+</script>
+</body>
+</html>
+)HTML";
+
+void loadMainPage() {
+  httpService.send(200, "text/html", webDisplay);
+}
+
+void sendSensorInfo() {
+  httpService.send(200, "text/plain", String(touchRawData));
+}
+
+void activateGuardMode() {
+  lockMode = true;
+  alertState = false;
+  httpService.send(200, "text/plain", "Guard Active");
+}
+
+void disableGuardMode() {
+  lockMode = false;
+  alertState = false;
+  setLightOutput(0);
+  httpService.send(200, "text/plain", "Guard Inactive");
+}
+
+void setLightOutput(int outputVal) {
+  analogWrite(outputLight1, outputVal);
+  analogWrite(outputLight2, outputVal);
+  analogWrite(outputLight3, outputVal);
+}
+
+void setup() {
+  Serial.begin(115200);
+
+  pinMode(outputLight1, OUTPUT);
+  pinMode(outputLight2, OUTPUT);
+  pinMode(outputLight3, OUTPUT);
+  pinMode(touchSignalPin, INPUT);
+  
+  setLightOutput(0);
+
+  WiFi.disconnect(true);
+  delay(100);
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(wifiId, wifiCode);
+
+  Serial.print("Connecting wireless network: ");
+  Serial.println(wifiId);
+  int waitCycle = 20;
+  while (WiFi.status() != WL_CONNECTED && waitCycle-- > 0) {
+    delay(500);
+    Serial.print(".");
+  }
+
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("\nWireless connection succeeded");
+    Serial.print("Monitor panel IP: ");
+    Serial.println(WiFi.localIP());
+  } else {
+    Serial.println("\nWireless connection failed");
+  }
+
+  httpService.on("/", loadMainPage);
+  httpService.on("/readData", sendSensorInfo);
+  httpService.on("/enableGuard", activateGuardMode);
+  httpService.on("/disableGuard", disableGuardMode);
+  
+  httpService.begin();
+}
+
+void loop() {
+  httpService.handleClient();
+
+  touchRawData = touchRead(touchSignalPin);
+
+  if (lockMode && !alertState) {
+    if (touchRawData < touchLimit) {
+      alertState = true;
+    }
+  }
+
+  if (alertState) {
+    setLightOutput(255);
+    delay(100);
+    setLightOutput(0);
+    delay(100);
+  }
+
+  delay(50);
+}
