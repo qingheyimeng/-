@@ -1,1 +1,37 @@
+const int touchPin = 4;
+const int ledPins[] = {2, 5, 19};
+const int ledCount = 3;
 
+bool ledState = false;
+bool lastTouchState = false;
+unsigned long lastDebounceTime = 0;
+const unsigned long debounceDelay = 50;
+
+void setup() {
+  Serial.begin(115200);
+  for (int i = 0; i < ledCount; i++) {
+    pinMode(ledPins[i], OUTPUT);
+    digitalWrite(ledPins[i], LOW);
+  }
+}
+
+void loop() {
+  int detectVal = touchRead(touchPin);
+  bool touchFlag = detectVal < 700;
+
+  if (touchFlag && !lastTouchState) {
+    if (millis() - lastDebounceTime > debounceDelay) {
+      ledState = !ledState;
+      lastDebounceTime = millis();
+      Serial.print("Touch activate, light status: ");
+      Serial.println(ledState ? "ON" : "OFF");
+    }
+  }
+
+  for (int idx = 0; idx < ledCount; idx++) {
+    digitalWrite(ledPins[idx], ledState);
+  }
+
+  lastTouchState = touchFlag;
+  delay(10);
+}
