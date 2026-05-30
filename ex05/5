@@ -1,0 +1,66 @@
+const int touchIo = 4;
+const int lightPins[] = {2, 5, 19};
+const int lightNum = 3;
+
+bool preTouchSignal = false;
+unsigned long debounceStamp = 0;
+const unsigned long shakeFilter = 50;
+
+int gear = 1;
+unsigned long hzValue = 1;
+unsigned long timeMark = 0;
+bool lightSwitch = LOW;
+
+void setup() {
+  Serial.begin(115200);
+  for (int x = 0; x < lightNum; x++) {
+    pinMode(lightPins[x], OUTPUT);
+    digitalWrite(lightPins[x], LOW);
+  }
+}
+
+void loop() {
+  int touchRaw = touchRead(touchIo);
+  bool nowTouch = touchRaw < 700;
+
+  if (nowTouch && !preTouchSignal) {
+    if (millis() - debounceStamp > shakeFilter) {
+      gear += 1;
+      if (gear > 3) gear = 1;
+      
+      switch (gear) {
+        case 1: hzValue = 1; break;
+        case 2: hzValue = 5; break;
+        case 3: hzValue = 10; break;
+      }
+
+      timeMark = millis();
+      lightSwitch = LOW;
+      outputAllLights(lightSwitch);
+
+      Serial.print("Current speed gear:");
+      Serial.print(gear);
+      Serial.print(", flash frequency:");
+      Serial.print(hzValue);
+      Serial.println("Hz");
+
+      debounceStamp = millis();
+    }
+  }
+  preTouchSignal = nowTouch;
+
+  unsigned long runTime = millis();
+  unsigned long waitTime = 500 / hzValue;
+
+  if (runTime - timeMark >= waitTime) {
+    timeMark = runTime;
+    lightSwitch = !lightSwitch;
+    outputAllLights(lightSwitch);
+  }
+}
+
+void outputAllLights(bool signal) {
+  for (int x = 0; x < lightNum; x++) {
+    digitalWrite(lightPins[x], signal);
+  }
+}
