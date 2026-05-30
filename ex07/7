@@ -1,0 +1,99 @@
+#include <WiFi.h>
+#include <WebServer.h>
+
+const char* wifiName = "123";
+const char* wifiKey = "00000000";
+
+const int lightPort1 = 2;
+const int lightPort2 = 5;
+const int lightPort3 = 19;
+
+WebServer webService(80);
+int lightLevel = 0;
+
+String pageCode = R"EOF(
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32 Dimmer Controller</title>
+    <style>
+        body{font-family: Helvetica; text-align: center; background: #eeeeee; padding: 32px;}
+        .box{background: #ffffff; padding: 36px; border-radius: 18px; display: inline-block;}
+        h1{color: #222222;}
+        .slideBar{width: 360px; height: 26px; margin: 22px 0;}
+        .numShow{font-size: 30px; font-weight: 600; color: #0066cc;}
+    </style>
+</head>
+<body>
+    <div class="box">
+        <h1>LED Brightness Adjust Panel</h1>
+        <input type="range" min="0" max="255" value="0" class="slideBar" id="slideInput" oninput="refreshDisplay()">
+        <p>Brightness Value：<span class="numShow" id="displayNum">0</span></p>
+    </div>
+
+    <script>
+        function refreshDisplay() {
+            let inputData = document.getElementById("slideInput").value;
+            document.getElementById("displayNum").innerText = inputData;
+            fetch("/adjust?lv=" + inputData);
+        }
+    </script>
+</body>
+</html>
+)EOF";
+
+void loadMainPage() {
+  webService.send(200, "text/html", pageCode);
+}
+
+void adjustLightVal() {
+  if (webService.hasArg("lv")) {
+    lightLevel = webService.arg("lv").toInt();
+    
+    if (lightLevel < 0) lightLevel = 0;
+    if (lightLevel > 255) lightLevel = 255;
+
+    analogWrite(lightPort1, lightLevel);
+    analogWrite(lightPort2, lightLevel);
+    analogWrite(lightPort3, lightLevel);
+
+    Serial.print("New brightness value: ");
+    Serial.println(lightLevel);
+  }
+  webService.send(200, "text/plain", "Complete");
+}
+
+void setup() {
+  Serial.begin(115200);
+
+  pinMode(lightPort1, OUTPUT);
+  pinMode(lightPort2, OUTPUT);
+  pinMode(lightPort3, OUTPUT);
+  
+  analogWrite(lightPort1, 0);
+  analogWrite(lightPort2, 0);
+  analogWrite(lightPort3, 0);
+
+  Serial.print("Connecting wireless network: ");
+  Serial.println(wifiName);
+  WiFi.begin(wifiName, wifiKey);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("");
+  Serial.println("Wireless link established");
+  Serial.print("Access control panel via this IP: ");
+  Serial.println(WiFi.localIP());
+
+  webService.on("/", loadMainPage);
+  webService.on("/adjust", adjustLightVal);
+
+  webService.begin();
+  Serial.println("Web service running");
+}
+
+void loop() {
+  webService.handleClient();
+}
